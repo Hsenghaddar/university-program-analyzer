@@ -9,9 +9,9 @@ def run_step(script_name):
 
 
 def main():
-    run_step("scraper.py")
-    run_step("cleaner.py")
-    run_step("webometrics_ranking.py")
+    run_step("study_eu_scrapped/study_eu_scraper.py")
+    run_step("study_eu_scrapped/clean_study_eu.py")
+    run_step("study_eu_scrapped/add_webometrics_ranking.py")
 
 
 if __name__ == "__main__":
