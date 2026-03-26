@@ -12,7 +12,7 @@ def run_step(script_name):
 
 
 def main():
-    run_step("scraper.py")
+    run_step("scrapper.py")
     run_step("cleaner.py")
     run_step("webometrics_ranking.py")
 
