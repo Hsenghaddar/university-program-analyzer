@@ -1,9 +1,12 @@
 import subprocess
 import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
 def run_step(script_name):
-    result = subprocess.run([sys.executable, script_name])
+    result = subprocess.run([sys.executable, str(BASE_DIR / script_name)])
     if result.returncode != 0:
         raise SystemExit(f"Failed while running {script_name}")
 
