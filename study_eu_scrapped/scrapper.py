@@ -202,7 +202,7 @@ class StudyEUScraper:
             current_url = SEARCH_URL
             page_num = 1
 
-            while current_url:
+            while current_url and page_num <= 1750:
                 self.driver.get(current_url)
                 self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                 time.sleep(2)
