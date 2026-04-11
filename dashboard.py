@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+
 st.set_page_config(page_title="EU University Program Analyzer", layout="wide")
 
 @st.cache_data
@@ -29,7 +30,6 @@ dataset_option = st.sidebar.selectbox(
     [
         "study_eu_programs_cleaned.csv",
         "study_eu_programs_with_ranking.csv",
-        "study_eu_programs.csv",
     ],
 )
 
@@ -38,11 +38,14 @@ df = load_data(dataset_option)
 st.sidebar.markdown("---")
 st.sidebar.header("🎯 Filters")
 
-if not df.empty:
+if not df.empty and df["tuition_fee_usd_total"].notna().any():
     min_fee = int(df["tuition_fee_usd_total"].min(skipna=True))
     max_fee = int(df["tuition_fee_usd_total"].max(skipna=True))
+
+    if min_fee == max_fee:
+        max_fee = min_fee + 1
 else:
-    min_fee, max_fee = 0, 0
+    min_fee, max_fee = 0, 1
 
 fee_range = st.sidebar.slider(
     "Tuition Fee Range (USD)",
@@ -64,6 +67,7 @@ country_filter = st.sidebar.multiselect(
 )
 
 keyword = st.sidebar.text_input("Keyword in Program Title").strip().lower()
+
 filtered_df = df[
     (df["tuition_fee_usd_total"].between(fee_range[0], fee_range[1]))
     & (df["degree"].isin(degree_filter))
@@ -86,9 +90,19 @@ col3.metric("Avg Duration (Years)", round(filtered_df["program_duration_year"].m
 col4.metric("Countries", filtered_df["university_location"].nunique() if not filtered_df.empty else 0)
 
 st.markdown("---")
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["💰 Tuition Analysis", "🏆 Ranking Analysis", "🌍 Geographic Insights", "📊 Correlation", "🔍 Program Explorer", "🏫 University Spotlight"]
+
+has_ranking = (
+    "global_ranking" in df.columns
+    and df["global_ranking"].notna().any()
 )
+if has_ranking:
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["💰 Tuition Analysis", "🏆 Ranking Analysis", "🌍 Geographic Insights", "📊 Correlation", "🔍 Program Explorer", "🏫 University Spotlight"]
+    )
+else:
+    tab1, tab3, tab4, tab5, tab6 = st.tabs(
+        ["💰 Tuition Analysis", "🌍 Geographic Insights", "📊 Correlation", "🔍 Program Explorer", "🏫 University Spotlight"]
+    )
 
 with tab1:
     if not filtered_df.empty:
@@ -100,40 +114,39 @@ with tab1:
         degree_avg = filtered_df.groupby("degree")["tuition_fee_usd_total"].mean().reset_index()
         fig2 = px.bar(degree_avg, x="degree", y="tuition_fee_usd_total", title="Average Tuition per Degree")
         st.plotly_chart(fig2, use_container_width=True)
+if has_ranking:
+    with tab2:
+        if not filtered_df.empty:
+            st.subheader("Ranking Distribution")
 
-with tab2:
-    if "global_ranking" in filtered_df.columns and not filtered_df.empty:
-        st.subheader("Ranking Distribution")
+            def ranking_group(rank):
+                if pd.isna(rank):
+                    return "N/A"
+                if rank <= 100:
+                    return "Top 100"
+                elif rank <= 300:
+                    return "Top 300"
+                elif rank <= 600:
+                    return "Top 600"
+                else:
+                    return "600+"
 
-        def ranking_group(rank):
-            if pd.isna(rank):
-                return "N/A"
-            if rank <= 100:
-                return "Top 100"
-            elif rank <= 300:
-                return "Top 300"
-            elif rank <= 600:
-                return "Top 600"
-            else:
-                return "600+"
+            filtered_df["ranking_group"] = filtered_df["global_ranking"].apply(ranking_group)
+            ranking_counts = filtered_df["ranking_group"].value_counts().reset_index()
+            ranking_counts.columns = ["ranking_group", "count"]
 
-        filtered_df["ranking_group"] = filtered_df["global_ranking"].apply(ranking_group)
-        ranking_counts = filtered_df["ranking_group"].value_counts().reset_index()
-        ranking_counts.columns = ["ranking_group", "count"]
+            fig3 = px.bar(ranking_counts, x="ranking_group", y="count", title="Programs by Ranking Tier")
+            st.plotly_chart(fig3, use_container_width=True)
 
-        fig3 = px.bar(ranking_counts, x="ranking_group", y="count", title="Programs by Ranking Tier")
-        st.plotly_chart(fig3, use_container_width=True)
-
-        st.subheader("Tuition vs Ranking")
-        fig4 = px.scatter(
-            filtered_df,
-            x="global_ranking",
-            y="tuition_fee_usd_total",
-            hover_data=["university_name", "program_name"],
-            title="Does Better Ranking Mean Higher Tuition?",
-        )
-        st.plotly_chart(fig4, use_container_width=True)
-
+            st.subheader("Tuition vs Ranking")
+            fig4 = px.scatter(
+                filtered_df,
+                x="global_ranking",
+                y="tuition_fee_usd_total",
+                hover_data=["university_name", "program_name"],
+                title="Does Better Ranking Mean Higher Tuition?",
+            )
+            st.plotly_chart(fig4, use_container_width=True)
 with tab3:
     if not filtered_df.empty:
         st.subheader("Programs per Country")
@@ -141,17 +154,14 @@ with tab3:
         country_counts.columns = ["country", "count"]
         fig5 = px.bar(country_counts, x="country", y="count", title="Number of Programs by Country")
         st.plotly_chart(fig5, use_container_width=True)
-
-    st.info("🌍 Map view requires latitude/longitude data. Add geocoded coordinates if available.")
-
 with tab4:
     if not filtered_df.empty:
         st.subheader("Correlation Matrix")
         numeric_df = filtered_df[["tuition_fee_usd_total", "program_duration_year"]].copy()
-        if "global_ranking" in filtered_df.columns:
+        if has_ranking:
             numeric_df["global_ranking"] = pd.to_numeric(filtered_df["global_ranking"], errors="coerce")
 
-        fig6 = px.imshow(numeric_df.corr(), text_auto=True, title="Correlation Between Numeric Variables")
+        fig6 = px.imshow(numeric_df.corr(), text_auto=True)
         st.plotly_chart(fig6, use_container_width=True)
 
         st.subheader("Tuition vs Duration")
@@ -160,9 +170,9 @@ with tab4:
             x="program_duration_year",
             y="tuition_fee_usd_total",
             hover_data=["university_name", "program_name"],
-            title="Tuition vs Duration",
         )
         st.plotly_chart(fig7, use_container_width=True)
+
 with tab5:
     st.subheader("Search Programs")
     search_text = st.text_input("Search by Program or University Name")
@@ -192,6 +202,7 @@ with tab5:
         top_programs = filtered_df.sort_values("tuition_fee_usd_total").head(10)
         for _, row in top_programs.iterrows():
             st.write(f"[{row['program_name']} - {row['university_name']}]({row['url']})")
+
 with tab6:
     if not filtered_df.empty:
         st.subheader("University Spotlight")
