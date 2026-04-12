@@ -56,14 +56,14 @@ fee_range = st.sidebar.slider(
 
 degree_filter = st.sidebar.multiselect(
     "Degree Type",
-    options=df["degree"].dropna().unique(),
-    default=df["degree"].dropna().unique(),
+    options=sorted(df["degree"].dropna().unique()),
+    default=[]
 )
 
 country_filter = st.sidebar.multiselect(
     "Country",
-    options=df["university_location"].dropna().unique(),
-    default=df["university_location"].dropna().unique(),
+    options=sorted(df["university_location"].dropna().unique()),
+    default=[]
 )
 
 keyword = st.sidebar.text_input("Keyword in Program Title").strip().lower()
