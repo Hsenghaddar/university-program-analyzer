@@ -8,7 +8,7 @@ st.set_page_config(page_title="EU University Program Analyzer", layout="wide")
 @st.cache_data
 def load_data(file_name):
     if not os.path.exists(file_name):
-        st.error(f"{file_name} not found in project folder.")
+        st.error(f"{file_name} not found in project folder. Make sure you ran EDA.ipynb first!")
         st.stop()
 
     df = pd.read_csv(file_name)
@@ -21,6 +21,10 @@ def load_data(file_name):
 
     df = df.dropna(subset=["tuition_fee_usd_total"])
 
+    # If ML tiers exist, convert them to text so they display correctly on charts
+    if "Value_Tier_ID" in df.columns:
+        df["Value_Tier_ID"] = "Tier " + df["Value_Tier_ID"].astype(str)
+
     return df
 
 st.sidebar.title("📊 Dataset Selection")
@@ -28,6 +32,7 @@ st.sidebar.title("📊 Dataset Selection")
 dataset_option = st.sidebar.selectbox(
     "Choose Dataset",
     [
+        "study_eu_ready_for_dashboard.csv", 
         "study_eu_programs_cleaned.csv",
         "study_eu_programs_with_ranking.csv",
     ],
@@ -54,9 +59,12 @@ fee_range = st.sidebar.slider(
     (min_fee, max_fee),
 )
 
+# 👈 NEW: Dynamic NLP Degree Check
+degree_col = "clean_degree_type" if "clean_degree_type" in df.columns else "degree"
+
 degree_filter = st.sidebar.multiselect(
-    "Degree Type",
-    options=sorted(df["degree"].dropna().unique()),
+    "Degree Type (NLP Cleaned)" if degree_col == "clean_degree_type" else "Degree Type",
+    options=sorted(df[degree_col].dropna().unique()),
     default=[]
 )
 
@@ -66,13 +74,33 @@ country_filter = st.sidebar.multiselect(
     default=[]
 )
 
+# 👈 NEW: ML Value Tier Filter
+tier_filter = []
+if "Value_Tier_ID" in df.columns:
+    st.sidebar.markdown("---")
+    st.sidebar.header("🤖 ML Insights")
+    tier_filter = st.sidebar.multiselect(
+        "Value Tiers (K-Means Clusters)",
+        options=sorted(df["Value_Tier_ID"].dropna().unique()),
+        default=[]
+    )
+
 keyword = st.sidebar.text_input("Keyword in Program Title").strip().lower()
 
+# Apply filters
 filtered_df = df[
     (df["tuition_fee_usd_total"].between(fee_range[0], fee_range[1]))
-    & (df["degree"].isin(degree_filter))
-    & (df["university_location"].isin(country_filter))
 ]
+
+# Keep your original logic: Only filter if user makes a selection
+if degree_filter:
+    filtered_df = filtered_df[filtered_df[degree_col].isin(degree_filter)]
+
+if country_filter:
+    filtered_df = filtered_df[filtered_df["university_location"].isin(country_filter)]
+
+if tier_filter and "Value_Tier_ID" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Value_Tier_ID"].isin(tier_filter)]
 
 if keyword:
     filtered_df = filtered_df[
@@ -95,6 +123,7 @@ has_ranking = (
     "global_ranking" in df.columns
     and df["global_ranking"].notna().any()
 )
+
 if has_ranking:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         ["💰 Tuition Analysis", "🏆 Ranking Analysis", "🌍 Geographic Insights", "📊 Correlation", "🔍 Program Explorer", "🏫 University Spotlight"]
@@ -111,9 +140,10 @@ with tab1:
         st.plotly_chart(fig1, use_container_width=True)
 
         st.subheader("Average Tuition by Degree")
-        degree_avg = filtered_df.groupby("degree")["tuition_fee_usd_total"].mean().reset_index()
-        fig2 = px.bar(degree_avg, x="degree", y="tuition_fee_usd_total", title="Average Tuition per Degree")
+        degree_avg = filtered_df.groupby(degree_col)["tuition_fee_usd_total"].mean().reset_index()
+        fig2 = px.bar(degree_avg, x=degree_col, y="tuition_fee_usd_total", title="Average Tuition per Degree")
         st.plotly_chart(fig2, use_container_width=True)
+
 if has_ranking:
     with tab2:
         if not filtered_df.empty:
@@ -138,15 +168,22 @@ if has_ranking:
             fig3 = px.bar(ranking_counts, x="ranking_group", y="count", title="Programs by Ranking Tier")
             st.plotly_chart(fig3, use_container_width=True)
 
-            st.subheader("Tuition vs Ranking")
+            st.subheader("Tuition vs Ranking (ML Clustered)")
+            # 👈 NEW: Color the scatter plot by ML Tier if it exists
+            color_column = "Value_Tier_ID" if "Value_Tier_ID" in filtered_df.columns else None
+            
             fig4 = px.scatter(
                 filtered_df,
                 x="global_ranking",
                 y="tuition_fee_usd_total",
+                color=color_column,
                 hover_data=["university_name", "program_name"],
                 title="Does Better Ranking Mean Higher Tuition?",
             )
+            # Invert X axis since Rank 1 is better than Rank 500
+            fig4.update_xaxes(autorange="reversed") 
             st.plotly_chart(fig4, use_container_width=True)
+
 with tab3:
     if not filtered_df.empty:
         st.subheader("Programs per Country")
@@ -154,6 +191,7 @@ with tab3:
         country_counts.columns = ["country", "count"]
         fig5 = px.bar(country_counts, x="country", y="count", title="Number of Programs by Country")
         st.plotly_chart(fig5, use_container_width=True)
+
 with tab4:
     if not filtered_df.empty:
         st.subheader("Correlation Matrix")
@@ -178,8 +216,8 @@ with tab5:
     search_text = st.text_input("Search by Program or University Name")
     if search_text:
         result_df = filtered_df[
-            filtered_df["program_name"].str.contains(search_text, case=False)
-            | filtered_df["university_name"].str.contains(search_text, case=False)
+            filtered_df["program_name"].str.contains(search_text, case=False, na=False)
+            | filtered_df["university_name"].str.contains(search_text, case=False, na=False)
         ]
     else:
         result_df = filtered_df
