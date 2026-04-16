@@ -3,7 +3,10 @@ import pandas as pd
 import plotly.express as px
 import os
 
+
 st.set_page_config(page_title="EU University Program Analyzer", layout="wide")
+
+
 
 @st.cache_data
 def load_data(file_name):
@@ -23,19 +26,7 @@ def load_data(file_name):
 
     return df
 
-st.sidebar.title("📊 Dataset Selection")
-
-dataset_option = st.sidebar.selectbox(
-    "Choose Dataset",
-    [
-        "study_eu_programs_cleaned.csv",
-        "study_eu_programs_with_ranking.csv",
-    ],
-)
-
-df = load_data(dataset_option)
-
-st.sidebar.markdown("---")
+df = load_data("study_eu_programs_with_ranking.csv")
 st.sidebar.header("🎯 Filters")
 
 if not df.empty and df["tuition_fee_usd_total"].notna().any():
