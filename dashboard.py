@@ -21,28 +21,18 @@ def load_data(file_name):
 
     df = df.dropna(subset=["tuition_fee_usd_total"])
 
-    # If ML tiers exist, convert them to text so they display correctly on charts
+    # Normalize ML tier column names and values
+    if "Value_Tier_ID" not in df.columns and "Value_Tier_Name" in df.columns:
+        df["Value_Tier_ID"] = df["Value_Tier_Name"].astype(str)
+
     if "Value_Tier_ID" in df.columns:
         df["Value_Tier_ID"] = "Tier " + df["Value_Tier_ID"].astype(str)
 
     return df
 
-st.sidebar.title("📊 Dataset Selection")
 
-dataset_option = st.sidebar.selectbox(
-    "Choose Dataset",
-    [
-        "study_eu_ready_for_dashboard.csv", 
-        "study_eu_programs_cleaned.csv",
-        "study_eu_programs_with_ranking.csv",
-    ],
-)
-
-df = load_data(dataset_option)
-
-st.sidebar.markdown("---")
 st.sidebar.header("🎯 Filters")
-
+df = load_data("study_eu_ready_for_dashboard.csv")
 if not df.empty and df["tuition_fee_usd_total"].notna().any():
     min_fee = int(df["tuition_fee_usd_total"].min(skipna=True))
     max_fee = int(df["tuition_fee_usd_total"].max(skipna=True))
